@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,13 +12,17 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
+	measurementv1 "github.com/aitra-ai/aitra-meter/api/proto/measurement/v1"
+	"github.com/aitra-ai/aitra-meter/internal/aggregation"
 )
 
 func main() {
-	metricsAddr := flag.String("metrics-addr",  ":8080", "Prometheus metrics and API listen address")
-	grpcAddr    := flag.String("grpc-addr",     ":9091", "gRPC listen address for measurement agents")
-	clusterName := flag.String("cluster",       "",      "Cluster name (required)")
-	logLevel    := flag.String("log-level",     "info",  "Log level: debug | info | warn | error")
+	metricsAddr := flag.String("metrics-addr", ":8080", "Prometheus metrics and API listen address")
+	grpcAddr    := flag.String("grpc-addr",    ":9091", "gRPC listen address for measurement agents")
+	clusterName := flag.String("cluster",      "",      "Cluster name (required)")
+	logLevel    := flag.String("log-level",    "info",  "Log level: debug | info | warn | error")
 	flag.Parse()
 
 	if *clusterName == "" {
@@ -35,7 +41,31 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// TODO: start gRPC server, aggregation loop, ClickHouse writer
+	// --- aggregation loop --------------------------------------------------
+	// Stubs used until the real k8s client and ClickHouse writer are wired in.
+	loop := aggregation.NewLoop(
+		*clusterName,
+		aggregation.NewResolver(&noopPodLookup{}, aggregation.PolicyConfig{}),
+		aggregation.NewCalibrationTableFromMap(nil),
+		&noopNodeHardware{},
+		&noopRecordWriter{log: log},
+	)
+
+	// --- gRPC server -------------------------------------------------------
+	lis, err := net.Listen("tcp", *grpcAddr)
+	if err != nil {
+		log.Fatal("gRPC listen failed", zap.String("addr", *grpcAddr), zap.Error(err))
+	}
+	grpcSrv := grpc.NewServer()
+	measurementv1.RegisterMeasurementServiceServer(grpcSrv, loop)
+	go func() {
+		log.Info("gRPC server listening", zap.String("addr", *grpcAddr))
+		if err := grpcSrv.Serve(lis); err != nil {
+			log.Error("gRPC server stopped", zap.Error(err))
+		}
+	}()
+
+	// --- HTTP server (metrics + health) ------------------------------------
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -47,17 +77,18 @@ func main() {
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})
 
-	srv := &http.Server{Addr: *metricsAddr, Handler: mux}
+	httpSrv := &http.Server{Addr: *metricsAddr, Handler: mux}
 	go func() {
 		log.Info("metrics server listening", zap.String("addr", *metricsAddr))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal("metrics server error", zap.Error(err))
 		}
 	}()
 
 	<-ctx.Done()
 	log.Info("shutting down")
-	_ = srv.Shutdown(context.Background())
+	grpcSrv.GracefulStop()
+	_ = httpSrv.Shutdown(context.Background())
 }
 
 func newLogger(level string) *zap.Logger {
@@ -65,4 +96,27 @@ func newLogger(level string) *zap.Logger {
 	_ = cfg.Level.UnmarshalText([]byte(level))
 	l, _ := cfg.Build()
 	return l
+}
+
+// --- noop stubs (replaced in later PRs) ------------------------------------
+
+type noopPodLookup struct{}
+
+func (n *noopPodLookup) ByNodeAndModel(_ context.Context, _, _ string) (aggregation.PodMeta, error) {
+	return aggregation.PodMeta{Namespace: "unknown", Workload: "unknown", Precision: "unknown"}, nil
+}
+
+type noopNodeHardware struct{}
+
+func (n *noopNodeHardware) Hardware(_ context.Context, _ string) string { return "unknown" }
+
+type noopRecordWriter struct{ log *zap.Logger }
+
+func (n *noopRecordWriter) Write(_ context.Context, r aggregation.MeasurementRecord) error {
+	n.log.Debug("measurement record (clickhouse writer not wired yet)",
+		zap.String("node", r.Node),
+		zap.String("namespace", r.Namespace),
+		zap.Float64("j_per_token", r.JPerToken),
+	)
+	return nil
 }
