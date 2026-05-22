@@ -20,6 +20,25 @@ measurementAgent:
     limits:
       cpu: 500m
       memory: 256Mi
+
+  # Provider configuration
+  # Energy providers:    zeus (default) | nvml
+  # Inference providers: vllm (default) | generic-prometheus | tgi | sglang | ollama | triton
+  energyProvider:
+    type: zeus
+    config: {}
+  inferenceProvider:
+    type: vllm
+    config:
+      endpoint: "http://localhost:8000/metrics"
+  # generic-prometheus example (works with TGI, SGLang, Ollama, Triton, any custom server):
+  # inferenceProvider:
+  #   type: generic-prometheus
+  #   config:
+  #     endpoint: "http://localhost:8080/metrics"
+  #     output_tokens_metric: "tgi_request_generated_tokens_total"
+  #     requests_running_metric: "tgi_queue_size"
+  #     model_name_label: "model_id"
   # CV gate: flag measurements with rolling CV above this threshold
   cvThreshold: 0.03
   cvWindowSize: 100
