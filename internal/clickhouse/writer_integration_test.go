@@ -112,6 +112,125 @@ func TestWriterIntegration(t *testing.T) {
 	}
 }
 
+// TestChargebackQuery30Day seeds 30 days of synthetic data across 3 namespaces
+// and asserts that the chargeback GROUP BY query (used by View 3) completes
+// within 10 seconds — AC-11.
+//
+// Row count: 3 namespaces × 2 models × 8,640 windows (5-min interval, 30 days)
+// = 51,840 rows. The MergeTree ORDER BY (cluster, namespace, model, timestamp)
+// makes this query highly selective.
+func TestChargebackQuery30Day(t *testing.T) {
+	ctx := context.Background()
+	dsn, stop := startClickHouse(ctx, t)
+	defer stop()
+
+	w, err := New(ctx, Config{
+		DSN:           dsn,
+		FlushInterval: 500 * time.Millisecond,
+		BatchSize:     500,
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer w.Close(ctx) //nolint:errcheck
+
+	type combo struct {
+		namespace string
+		model     string
+		method    string
+	}
+	combos := []combo{
+		{"prod", "llama-3-8b", "direct"},
+		{"prod", "llama-3-70b", "direct"},
+		{"staging", "llama-3-8b", "direct"},
+		{"staging", "llama-3-70b", "direct"},
+		{"shared", "llama-3-8b", "proportional"},
+		{"shared", "llama-3-70b", "proportional"},
+	}
+
+	// One record every 5 minutes for 30 days = 8,640 records per combo.
+	step := 5 * time.Minute
+	end := time.Now().UTC().Truncate(step)
+	start := end.Add(-30 * 24 * time.Hour)
+
+	totalInserted := 0
+	for _, c := range combos {
+		for ts := start; ts.Before(end); ts = ts.Add(step) {
+			_ = w.Write(ctx, aggregation.MeasurementRecord{
+				TimestampUnixMs:   ts.UnixMilli(),
+				Cluster:           "test",
+				Node:              "node-0",
+				Namespace:         c.namespace,
+				Workload:          "chat",
+				Model:             c.model,
+				Hardware:          "h100",
+				Precision:         "fp16",
+				EnergyJoules:      412.0,
+				OutputTokens:      1000,
+				JPerToken:         0.412,
+				CalibrationTier:   aggregation.TierAitraBenchmark,
+				AttributionMethod: aggregation.AttributionMethod(c.method),
+				CV:                0.01,
+				Stable:            true,
+				EnergyProvider:    "nvml",
+				InferenceProvider: "vllm",
+			})
+			totalInserted++
+		}
+		// Flush after each combo to avoid holding too much in memory.
+		time.Sleep(600 * time.Millisecond)
+	}
+
+	// Final flush + small margin for the last batch.
+	time.Sleep(1 * time.Second)
+
+	t.Logf("inserted %d rows", totalInserted)
+
+	// --- AC-11: 30-day chargeback query must complete within 10 seconds ---
+	chargebackSQL := `
+		SELECT
+			namespace,
+			workload,
+			model,
+			hardware,
+			any(calibration_tier)   AS calibration_tier,
+			any(attribution_method) AS attribution_method,
+			SUM(energy_joules)      AS energy_joules,
+			SUM(output_tokens)      AS token_count
+		FROM aitra_measurements
+		WHERE timestamp >= now() - INTERVAL 30 DAY
+		GROUP BY namespace, workload, model, hardware
+		ORDER BY energy_joules DESC`
+
+	queryStart := time.Now()
+	rows, err := w.conn.Query(ctx, chargebackSQL)
+	if err != nil {
+		t.Fatalf("chargeback query: %v", err)
+	}
+	defer rows.Close()
+
+	var rowCount int
+	for rows.Next() {
+		var ns, wl, model, hw, tier, method string
+		var joules float64
+		var tokens uint64
+		if err := rows.Scan(&ns, &wl, &model, &hw, &tier, &method, &joules, &tokens); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		rowCount++
+	}
+	elapsed := time.Since(queryStart)
+
+	t.Logf("chargeback query returned %d rows in %s", rowCount, elapsed)
+
+	if rowCount != len(combos) {
+		t.Errorf("chargeback query returned %d rows, want %d", rowCount, len(combos))
+	}
+	if elapsed > 10*time.Second {
+		t.Errorf("chargeback query took %s, must complete within 10s (AC-11)", elapsed)
+	}
+}
+
 func TestWriterBatchFlushOnSize(t *testing.T) {
 	ctx := context.Background()
 	dsn, stop := startClickHouse(ctx, t)

@@ -1,0 +1,79 @@
+version: "3.9"
+
+# Local dev stack for testing AC-5, AC-6, AC-7, AC-11 without a Kubernetes cluster.
+#
+# Usage:
+#   docker compose up -d
+#   go run ./dev/seed.go          # populate 30 days of synthetic ClickHouse data
+#   open http://localhost:3000    # dashboard
+#   open http://localhost:9090    # Prometheus UI
+#   open http://localhost:8123/play  # ClickHouse UI
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    volumes:
+      - ./dev/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=90d"
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DB: default
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ports:
+      - "9000:9000"   # native protocol (seed.go, aggregation-service)
+      - "8123:8123"   # HTTP interface (dashboard)
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: unless-stopped
+
+  aggregation-service:
+    build:
+      context: .
+      dockerfile: build/aggregation-service/Dockerfile
+    environment:
+      CLUSTER_NAME: dev
+      CLICKHOUSE_DSN: "clickhouse://default:@clickhouse:9000/default?dial_timeout=5s"
+      # No --kubeconfig in dev — aggregation-service will fail pod/node lookups
+      # gracefully (namespace=unknown, method=direct) without a real cluster.
+    ports:
+      - "9091:9091"   # gRPC (measurement agents)
+      - "8080:8080"   # HTTP metrics (Prometheus scrape target)
+    depends_on:
+      - clickhouse
+      - prometheus
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: dashboard
+      dockerfile: Dockerfile
+    environment:
+      PROMETHEUS_URL: "http://prometheus:9090"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DATABASE: default
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - clickhouse
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  clickhouse-data:
