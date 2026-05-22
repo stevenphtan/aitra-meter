@@ -92,8 +92,7 @@ func (v *VLLMProvider) rawLines(ctx context.Context) ([]string, error) {
 	defer resp.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(resp.Body)
 	if err != nil { return nil, err }
-	return strings.Split(string(body), "
-"), nil
+	return strings.Split(string(body), "\n"), nil
 }
 
 func extractLabel(line, label string) string {

@@ -35,7 +35,7 @@ func RegisterInference(name string, factory InferenceProviderFactory) {
 // NewEnergy creates an EnergyProvider by name.
 func NewEnergy(name string, config map[string]string) (EnergyProvider, error) {
 	mu.RLock()
-	factory, ok := eneregyProviders[name]
+	factory, ok := energyProviders[name]
 	mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("unknown energy provider %q — registered: %v", name, energyProviderNames())

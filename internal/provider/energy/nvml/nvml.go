@@ -1,3 +1,5 @@
+//go:build linux
+
 // Package nvml provides a pure-Go EnergyProvider using go-nvml.
 // This is the recommended provider for NVIDIA GPUs when a Python
 // sidecar is not desirable. Zeus remains the default for broader

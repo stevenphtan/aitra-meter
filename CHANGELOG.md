@@ -27,6 +27,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Architecture Decision Records 0001–0004
 - SECURITY.md, ROADMAP.md, GOVERNANCE.md, CONTRIBUTING.md
 
+### Fixed
+- Typo `eneregyProviders` → `energyProviders` in `internal/provider/registry.go:38` caused `NewEnergy` to always return "unknown provider"
+- Literal newline inside string literal in `internal/provider/inference/vllm/vllm.go:95` prevented compilation
+- `github.com/NVIDIA/go-nvml` uses `RTLD_DEEPBIND` (Linux-only CGO constant); added `//go:build linux` to the nvml provider and split its side-effect import into `cmd/measurement-agent/providers_linux.go`
+
 ### Changed
 - Annotation prefix migrated from `aitra.io` to `aitra-ai.github.io`
 - API group migrated from `aitra.io/v1alpha1` to `aitra-ai.github.io/v1alpha1`

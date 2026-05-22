@@ -11,7 +11,6 @@ import (
 
 	// Import providers to trigger their init() registration.
 	_ "github.com/aitra-ai/aitra-meter/internal/provider/energy/zeus"
-	_ "github.com/aitra-ai/aitra-meter/internal/provider/energy/nvml"
 	_ "github.com/aitra-ai/aitra-meter/internal/provider/inference/vllm"
 	_ "github.com/aitra-ai/aitra-meter/internal/provider/inference/genericprometheus"
 )
@@ -35,6 +34,7 @@ func main() {
 	defer cancel()
 
 	// TODO: initialize providers, start measurement loop, stream to aggregator
+	_ = aggregatorAddr
 	<-ctx.Done()
 	log.Info("shutting down")
 }
