@@ -112,7 +112,7 @@ All external dependencies have a manual ConfigMap fallback. Air-gapped clusters 
 ### 5.1 Measurement agent (DaemonSet)
 
 **Kind:** DaemonSet  
-**Image:** `ghcr.io/stevenphtan/aitra-meter/measurement-agent:v1`  
+**Image:** `ghcr.io/aitra-ai/aitra-meter/measurement-agent:v1`  
 **Node selector:** `aitra.io/gpu=true`  
 **Security context:** `hostPID: true`, `privileged: true`
 
@@ -149,7 +149,7 @@ aitra_measurement_window_stable{node, model_name}
 
 **Kind:** Deployment  
 **Replicas:** 1 (Phase 1)  
-**Image:** `ghcr.io/stevenphtan/aitra-meter/aggregation-service:v1`
+**Image:** `ghcr.io/aitra-ai/aitra-meter/aggregation-service:v1`
 
 **Responsibilities:**
 - Receive per-window energy measurements from all measurement agents
@@ -494,4 +494,4 @@ No write permissions required on any Kubernetes resource.
 ---
 
 *Aitra Meter · Technical Specification v1.0 · SODA Foundation · Apache 2.0 · May 2026*  
-*github.com/stevenphtan/aitra-meter · Singapore AI Lab · Tsinghua University / LF Research*
+*github.com/aitra-ai/aitra-meter · Singapore AI Lab · Tsinghua University / LF Research*
