@@ -12,7 +12,7 @@ measurementAgent:
     pullPolicy: IfNotPresent
   # Node selector — DaemonSet only schedules to nodes with this label
   nodeSelector:
-    aitra.io/gpu: "true"
+    aitra-ai.github.io/gpu: "true"
   resources:
     requests:
       cpu: 100m
