@@ -7,7 +7,7 @@ cluster:
 
 measurementAgent:
   image:
-    repository: ghcr.io/stevenphtan/aitra-meter/measurement-agent
+    repository: ghcr.io/aitra-ai/aitra-meter/measurement-agent
     tag: "0.1.0"
     pullPolicy: IfNotPresent
   # Node selector — DaemonSet only schedules to nodes with this label
@@ -26,7 +26,7 @@ measurementAgent:
 
 aggregationService:
   image:
-    repository: ghcr.io/stevenphtan/aitra-meter/aggregation-service
+    repository: ghcr.io/aitra-ai/aitra-meter/aggregation-service
     tag: "0.1.0"
     pullPolicy: IfNotPresent
   replicas: 1
@@ -42,7 +42,7 @@ aggregationService:
 dashboard:
   enabled: true
   image:
-    repository: ghcr.io/stevenphtan/aitra-meter/dashboard
+    repository: ghcr.io/aitra-ai/aitra-meter/dashboard
     tag: "0.1.0"
     pullPolicy: IfNotPresent
   replicas: 1
