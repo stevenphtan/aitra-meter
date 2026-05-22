@@ -113,7 +113,7 @@ All external dependencies have a manual ConfigMap fallback. Air-gapped clusters 
 
 **Kind:** DaemonSet  
 **Image:** `ghcr.io/aitra-ai/aitra-meter/measurement-agent:v1`  
-**Node selector:** `aitra.io/gpu=true`  
+**Node selector:** `aitra-ai.github.io/gpu=true`  
 **Security context:** `hostPID: true`, `privileged: true`
 
 **Responsibilities:**
@@ -172,12 +172,12 @@ aitra_measurement_window_stable{node, model_name}
 | Dimension | Source | Required |
 |---|---|---|
 | `namespace` | Pod namespace | Yes |
-| `workload` | Pod annotation `aitra.io/workload` | No — `unknown` if absent |
+| `workload` | Pod annotation `aitra-ai.github.io/workload` | No — `unknown` if absent |
 | `model` | vLLM metric label `model_name` | Yes |
 | `hardware` | Node label `gpu` | Yes |
-| `precision` | Pod annotation `aitra.io/precision` | No |
-| `team` | Pod annotation `aitra.io/team` | No |
-| `cost_centre` | Pod annotation `aitra.io/cost-centre` | No |
+| `precision` | Pod annotation `aitra-ai.github.io/precision` | No |
+| `team` | Pod annotation `aitra-ai.github.io/team` | No |
+| `cost_centre` | Pod annotation `aitra-ai.github.io/cost-centre` | No |
 
 **Calibration tier lookup (priority order):**
 1. `aitra_benchmark` — Aitra Benchmark published dataset
@@ -203,7 +203,7 @@ aitra_idle_time_ratio{node}
 ### 5.3 CRD: MeasurementPolicy
 
 ```yaml
-apiVersion: aitra.io/v1alpha1
+apiVersion: aitra-ai.github.io/v1alpha1
 kind: MeasurementPolicy
 metadata:
   name: default
@@ -232,7 +232,7 @@ spec:
 ### 5.4 CRD: SiteConfig
 
 ```yaml
-apiVersion: aitra.io/v1alpha1
+apiVersion: aitra-ai.github.io/v1alpha1
 kind: SiteConfig
 metadata:
   name: sgp-dc01
@@ -373,16 +373,16 @@ PUE configured in `SiteConfig`. Shown as a configured input alongside raw measur
 ```yaml
 labels:
   gpu: h100
-  aitra.io/gpu: "true"
+  aitra-ai.github.io/gpu: "true"
 ```
 
 **Pod annotations (operator responsibility):**
 ```yaml
 annotations:
-  aitra.io/workload: chat
-  aitra.io/precision: fp16
-  aitra.io/team: platform
-  aitra.io/cost-centre: cc-1102
+  aitra-ai.github.io/workload: chat
+  aitra-ai.github.io/precision: fp16
+  aitra-ai.github.io/team: platform
+  aitra-ai.github.io/cost-centre: cc-1102
 ```
 
 Missing annotations result in `unknown` for the dimension — records are not dropped.
@@ -441,7 +441,7 @@ rules:
 - apiGroups: [""]
   resources: ["pods", "nodes"]
   verbs: ["get", "list", "watch"]
-- apiGroups: ["aitra.io"]
+- apiGroups: ["aitra-ai.github.io"]
   resources: ["measurementpolicies", "siteconfigs"]
   verbs: ["get", "list", "watch"]
 ```
@@ -452,7 +452,7 @@ No write permissions required on any Kubernetes resource.
 
 ## 13. Security and compliance
 
-- No PII in measurement records by default. `aitra.io/user-id` is opt-in.
+- No PII in measurement records by default. `aitra-ai.github.io/user-id` is opt-in.
 - Air-gapped mode: all external API calls disabled via `airGapped: true`.
 - MAS-regulated deployments: air-gapped mode + offline Helm + pre-pulled images.
 - External API keys stored in Kubernetes Secrets, never in ConfigMaps or logs.
