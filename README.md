@@ -89,11 +89,34 @@ Dashboard · Grafana · OTel · Lago
 
 ## Documentation
 
+### Guides
+- [Getting started](docs/guides/getting-started.md) — install and first measurement in 15 minutes
+- [Writing a provider](docs/guides/writing-a-provider.md) — add support for a new inference server or energy backend
+- [Operations](docs/guides/operations.md) — upgrading, sizing, air-gapped install
+- [Troubleshooting](docs/guides/troubleshooting.md)
+
+### Reference
+- [Metrics reference](docs/reference/metrics.md) — all Prometheus metrics, types, labels, PromQL examples
+- [Configuration reference](docs/reference/configuration.md) — all Helm values, CRD fields, pod annotations
+- [HTTP API reference](docs/reference/api.md) — aggregation service API
+- [Alerting rules](docs/reference/alerting-rules.md) — reference Prometheus alerting rules
+- [Compatibility](docs/reference/compatibility.md) — provider × hardware × inference server matrix
+- [Glossary](docs/reference/glossary.md)
+
+### Design
 - [Technical Specification v1.0](docs/spec/aitra-meter-spec-v1.0.md)
-- [Project Blueprint](docs/blueprint/aitra-meter-blueprint.md)
 - [Architecture Decision Records](docs/adr/)
+
+### Project
+- [Roadmap](ROADMAP.md)
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 - [Governance](GOVERNANCE.md)
+
+### Examples
+- [MeasurementPolicy examples](examples/)
+- [Annotated inference Deployment](examples/inference-deployment-annotated.yaml)
 
 ## Project status
 
