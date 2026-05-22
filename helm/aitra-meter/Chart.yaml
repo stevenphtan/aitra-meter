@@ -20,7 +20,7 @@ sources:
 
 maintainers:
   - name: stevenphtan
-    url: https://github.com/aitra-ai
+    url: https://github.com/stevenphtan
 
 dependencies:
   - name: clickhouse
