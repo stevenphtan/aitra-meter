@@ -16,13 +16,15 @@ import (
 
 	measurementv1 "github.com/aitra-ai/aitra-meter/api/proto/measurement/v1"
 	"github.com/aitra-ai/aitra-meter/internal/aggregation"
+	"github.com/aitra-ai/aitra-meter/internal/clickhouse"
 )
 
 func main() {
-	metricsAddr := flag.String("metrics-addr", ":8080", "Prometheus metrics and API listen address")
-	grpcAddr    := flag.String("grpc-addr",    ":9091", "gRPC listen address for measurement agents")
-	clusterName := flag.String("cluster",      "",      "Cluster name (required)")
-	logLevel    := flag.String("log-level",    "info",  "Log level: debug | info | warn | error")
+	metricsAddr  := flag.String("metrics-addr",   ":8080", "Prometheus metrics and API listen address")
+	grpcAddr     := flag.String("grpc-addr",      ":9091", "gRPC listen address for measurement agents")
+	clusterName  := flag.String("cluster",        "",      "Cluster name (required)")
+	clickhouseDSN := flag.String("clickhouse-dsn", "",     "ClickHouse DSN (omit to disable persistence)")
+	logLevel     := flag.String("log-level",      "info",  "Log level: debug | info | warn | error")
 	flag.Parse()
 
 	if *clusterName == "" {
@@ -41,14 +43,28 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// --- ClickHouse writer -------------------------------------------------
+	var writer aggregation.RecordWriter = &noopRecordWriter{log: log}
+	if *clickhouseDSN != "" {
+		chWriter, err := clickhouse.New(ctx, clickhouse.Config{DSN: *clickhouseDSN}, log)
+		if err != nil {
+			log.Fatal("clickhouse init failed", zap.Error(err))
+		}
+		defer chWriter.Close(context.Background()) //nolint:errcheck
+		writer = chWriter
+		log.Info("clickhouse writer enabled")
+	} else {
+		log.Warn("--clickhouse-dsn not set; measurement records will not be persisted")
+	}
+
 	// --- aggregation loop --------------------------------------------------
-	// Stubs used until the real k8s client and ClickHouse writer are wired in.
+	// PodLookup and NodeHardware stubs replaced in a subsequent PR (k8s client).
 	loop := aggregation.NewLoop(
 		*clusterName,
 		aggregation.NewResolver(&noopPodLookup{}, aggregation.PolicyConfig{}),
 		aggregation.NewCalibrationTableFromMap(nil),
 		&noopNodeHardware{},
-		&noopRecordWriter{log: log},
+		writer,
 	)
 
 	// --- gRPC server -------------------------------------------------------
@@ -113,7 +129,7 @@ func (n *noopNodeHardware) Hardware(_ context.Context, _ string) string { return
 type noopRecordWriter struct{ log *zap.Logger }
 
 func (n *noopRecordWriter) Write(_ context.Context, r aggregation.MeasurementRecord) error {
-	n.log.Debug("measurement record (clickhouse writer not wired yet)",
+	n.log.Debug("measurement record (no clickhouse DSN configured)",
 		zap.String("node", r.Node),
 		zap.String("namespace", r.Namespace),
 		zap.Float64("j_per_token", r.JPerToken),
