@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -13,18 +14,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	measurementv1 "github.com/aitra-ai/aitra-meter/api/proto/measurement/v1"
 	"github.com/aitra-ai/aitra-meter/internal/aggregation"
 	"github.com/aitra-ai/aitra-meter/internal/clickhouse"
+	k8slookup "github.com/aitra-ai/aitra-meter/internal/k8s"
 )
 
 func main() {
-	metricsAddr  := flag.String("metrics-addr",   ":8080", "Prometheus metrics and API listen address")
-	grpcAddr     := flag.String("grpc-addr",      ":9091", "gRPC listen address for measurement agents")
-	clusterName  := flag.String("cluster",        "",      "Cluster name (required)")
-	clickhouseDSN := flag.String("clickhouse-dsn", "",     "ClickHouse DSN (omit to disable persistence)")
-	logLevel     := flag.String("log-level",      "info",  "Log level: debug | info | warn | error")
+	metricsAddr   := flag.String("metrics-addr",   ":8080", "Prometheus metrics and API listen address")
+	grpcAddr      := flag.String("grpc-addr",      ":9091", "gRPC listen address for measurement agents")
+	clusterName   := flag.String("cluster",        "",      "Cluster name (required)")
+	clickhouseDSN := flag.String("clickhouse-dsn", "",      "ClickHouse DSN (omit to disable persistence)")
+	kubeconfig    := flag.String("kubeconfig",     "",      "Path to kubeconfig (empty = in-cluster)")
+	logLevel      := flag.String("log-level",      "info",  "Log level: debug | info | warn | error")
 	flag.Parse()
 
 	if *clusterName == "" {
@@ -57,13 +63,18 @@ func main() {
 		log.Warn("--clickhouse-dsn not set; measurement records will not be persisted")
 	}
 
+	// --- Kubernetes client -------------------------------------------------
+	k8sClient, err := buildK8sClient(*kubeconfig)
+	if err != nil {
+		log.Fatal("kubernetes client init failed", zap.Error(err))
+	}
+
 	// --- aggregation loop --------------------------------------------------
-	// PodLookup and NodeHardware stubs replaced in a subsequent PR (k8s client).
 	loop := aggregation.NewLoop(
 		*clusterName,
-		aggregation.NewResolver(&noopPodLookup{}, aggregation.PolicyConfig{}),
+		aggregation.NewResolver(k8slookup.NewPodMetaLookup(k8sClient), aggregation.PolicyConfig{}),
 		aggregation.NewCalibrationTableFromMap(nil),
-		&noopNodeHardware{},
+		k8slookup.NewNodeHardwareLookup(k8sClient),
 		writer,
 	)
 
@@ -114,17 +125,7 @@ func newLogger(level string) *zap.Logger {
 	return l
 }
 
-// --- noop stubs (replaced in later PRs) ------------------------------------
-
-type noopPodLookup struct{}
-
-func (n *noopPodLookup) ByNodeAndModel(_ context.Context, _, _ string) (aggregation.PodMeta, error) {
-	return aggregation.PodMeta{Namespace: "unknown", Workload: "unknown", Precision: "unknown"}, nil
-}
-
-type noopNodeHardware struct{}
-
-func (n *noopNodeHardware) Hardware(_ context.Context, _ string) string { return "unknown" }
+// --- helpers ----------------------------------------------------------------
 
 type noopRecordWriter struct{ log *zap.Logger }
 
@@ -135,4 +136,18 @@ func (n *noopRecordWriter) Write(_ context.Context, r aggregation.MeasurementRec
 		zap.Float64("j_per_token", r.JPerToken),
 	)
 	return nil
+}
+
+func buildK8sClient(kubeconfigPath string) (kubernetes.Interface, error) {
+	var restCfg *rest.Config
+	var err error
+	if kubeconfigPath != "" {
+		restCfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	} else {
+		restCfg, err = rest.InClusterConfig()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("kubernetes config: %w", err)
+	}
+	return kubernetes.NewForConfig(restCfg)
 }
