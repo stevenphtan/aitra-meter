@@ -1,11 +1,11 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: siteconfigs.aitra.io
+  name: siteconfigs.aitra-ai.github.io
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
 spec:
-  group: aitra.io
+  group: aitra-ai.github.io
   names:
     kind: SiteConfig
     listKind: SiteConfigList
