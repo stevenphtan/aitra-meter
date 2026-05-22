@@ -11,7 +11,7 @@ The central Kubernetes Deployment that receives measurements from all measuremen
 How energy consumption is assigned to a namespace. `direct` means the namespace has its own vLLM instance and energy is measured directly. `proportional` means the namespace shares a vLLM instance and energy is allocated by token count fraction. Declared per namespace in `MeasurementPolicy`. Always surfaced in exports.
 
 **Aitra Benchmark**  
-The first-party calibration dataset produced by Aitra in association with Singapore AI Lab. Covers J/token across GPU tiers, model families, and workload types. The preferred calibration source when available. In development.
+The first-party calibration dataset produced by Aitra. Covers J/token across GPU tiers, model families, and workload types. The preferred calibration source when available. In development.
 
 **Calibration baseline**  
 A reference J/token value for a given model × hardware combination, used to contextualise live measurements. Three tiers: `aitra_benchmark`, `reference` (ML.ENERGY v3.0), `self_calibrated`.
