@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	chdriver "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap"
@@ -90,13 +89,7 @@ func TestWriterIntegration(t *testing.T) {
 	// Wait for flush interval + margin.
 	time.Sleep(1 * time.Second)
 
-	// Query the table.
-	conn, err := chdriver.Open(&chdriver.Options{
-		Addr: []string{fmt.Sprintf("%s", dsn)},
-	})
-	_ = conn
-	// Use a raw query via the Writer's connection instead.
-	rows, err := w.conn.Query(ctx, `SELECT count() FROM aitra_measurements`)
+		rows, err := w.conn.Query(ctx, `SELECT count() FROM aitra_measurements`)
 	if err != nil {
 		t.Fatalf("count query: %v", err)
 	}
