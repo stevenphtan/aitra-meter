@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- internal/agent/loop.go — measurement agent core loop (BeginWindow → EndWindow → token delta → gRPC ReportWindow)
+- cmd/measurement-agent/main.go — fully wired entry point with --node, --energy-provider, --inference-provider, --aggregator, --window-seconds flags
+- 7 race-clean tests in internal/agent/loop_test.go
+- internal/model/record.go — zero-dependency MeasurementRecord, CalibrationTier, AttributionMethod types
+- internal/storage/clickhouse/clickhouse.go — full Backend implementation with QueryChargeback
+- internal/storage/memory/memory.go — in-memory backend for tests
+- internal/storage/duckdb/duckdb.go — DuckDB backend stub (interface complete, driver TODO)
+- ADR 0005: pluggable storage backend interface
+- All 6 Phase 1 dashboard views (JPerTokenTable, TrendChart 2a/2b, ChargebackTable, IdleChart, CarbonCostTable)
+- docker-compose dev stack + dev/seed.go (103k synthetic rows)
+
 ### Fixed
 - Typo  →  in  (build error)
 - NVML provider uses  which is Linux-only — added  tag to  and moved side-effect import to  (macOS build error)
