@@ -7,37 +7,13 @@ import (
 
 	measurementv1 "github.com/aitra-ai/aitra-meter/api/proto/measurement/v1"
 	"github.com/aitra-ai/aitra-meter/internal/metrics"
+	"github.com/aitra-ai/aitra-meter/internal/model"
+	"github.com/aitra-ai/aitra-meter/internal/storage"
 )
 
-// MeasurementRecord is the schema written to ClickHouse for every accepted window.
-type MeasurementRecord struct {
-	TimestampUnixMs   int64
-	Cluster           string
-	Node              string
-	Namespace         string
-	Workload          string
-	Model             string
-	Hardware          string
-	Precision         string
-	Team              string
-	CostCentre        string
-	EnergyJoules      float64
-	OutputTokens      uint64
-	JPerToken         float64
-	CalibrationTier   CalibrationTier
-	RefJPerToken      float64
-	AttributionMethod AttributionMethod
-	CV                float64
-	Stable            bool
-	EnergyProvider    string
-	InferenceProvider string
-}
-
-// RecordWriter is the interface the Loop uses to persist measurement records.
-// The real implementation writes to ClickHouse; tests use an in-memory stub.
-type RecordWriter interface {
-	Write(ctx context.Context, r MeasurementRecord) error
-}
+// MeasurementRecord is a type alias for model.MeasurementRecord.
+// All code in this package (including tests) may use the unqualified name.
+type MeasurementRecord = model.MeasurementRecord
 
 // NodeHardware resolves the GPU tier label for a Kubernetes node.
 // The real implementation reads the node label "gpu" via client-go;
@@ -59,7 +35,7 @@ type Loop struct {
 	resolver    *Resolver
 	calibration *CalibrationTable
 	hardware    NodeHardware
-	writer      RecordWriter
+	writer      storage.RecordWriter
 
 	mu      sync.Mutex
 	cvByKey map[string]*CVTracker // key: node+"\x00"+modelName
@@ -71,7 +47,7 @@ func NewLoop(
 	resolver *Resolver,
 	cal *CalibrationTable,
 	hw NodeHardware,
-	writer RecordWriter,
+	writer storage.RecordWriter,
 ) *Loop {
 	return &Loop{
 		cluster:     cluster,

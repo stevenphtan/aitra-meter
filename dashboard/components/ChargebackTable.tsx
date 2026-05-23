@@ -2,7 +2,17 @@
 
 import { useState, useMemo } from "react";
 import useSWR from "swr";
-import type { ChargebackRow } from "@/lib/clickhouse";
+
+interface ChargebackRow {
+  namespace: string;
+  workload: string;
+  model: string;
+  hardware: string;
+  calibration_tier: string;
+  attribution_method: string;
+  energy_joules: number;
+  token_count: number;
+}
 
 const PERIOD_OPTIONS = [7, 14, 30, 90] as const;
 type Period = (typeof PERIOD_OPTIONS)[number];

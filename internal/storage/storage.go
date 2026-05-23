@@ -11,16 +11,16 @@ import (
 	"context"
 	"time"
 
-	"github.com/aitra-ai/aitra-meter/internal/aggregation"
+	"github.com/aitra-ai/aitra-meter/internal/model"
 )
 
 // RecordWriter persists measurement windows produced by the aggregation loop.
 type RecordWriter interface {
 	// Write enqueues a single record. Implementations may buffer writes.
-	Write(ctx context.Context, r aggregation.MeasurementRecord) error
+	Write(ctx context.Context, r model.MeasurementRecord) error
 
 	// WriteBatch enqueues a slice of records atomically where possible.
-	WriteBatch(ctx context.Context, rs []aggregation.MeasurementRecord) error
+	WriteBatch(ctx context.Context, rs []model.MeasurementRecord) error
 
 	// Close flushes any buffered records and releases resources.
 	Close() error

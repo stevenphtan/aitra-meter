@@ -1,28 +1,79 @@
 /**
- * Server-side proxy for ClickHouse chargeback queries.
- * Keeps ClickHouse credentials out of the browser.
+ * Server-side proxy for the aggregation service chargeback endpoint.
+ * Keeps the aggregation service address internal and avoids browser CORS.
  *
- * GET /api/chargeback?days=30
+ * GET /api/chargeback?from=<RFC3339>&to=<RFC3339>&pue=<float>&days=<int>
  *
- * Returns raw joules so the client applies PUE and cost/kWh without re-fetching.
+ * "days" is a convenience shorthand: sets from = now-Nd, to = now.
+ * Returns the aggregation service response unchanged.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryChargeback } from "@/lib/clickhouse";
+
+const AGGREGATION_URL =
+  process.env.AGGREGATION_URL ?? "http://aitra-meter-aggregation:8080";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const daysParam = req.nextUrl.searchParams.get("days");
-  const days = daysParam ? parseInt(daysParam, 10) : 30;
+  const { searchParams } = req.nextUrl;
 
-  if (isNaN(days) || days < 1 || days > 365) {
-    return NextResponse.json(
-      { error: "days must be an integer between 1 and 365" },
-      { status: 400 },
-    );
+  // Build upstream query string — pass through from/to/pue if set,
+  // otherwise derive from the "days" convenience param.
+  const params = new URLSearchParams();
+
+  const daysParam = searchParams.get("days");
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  const pueParam = searchParams.get("pue");
+
+  if (fromParam && toParam) {
+    params.set("from", fromParam);
+    params.set("to", toParam);
+  } else {
+    const days = daysParam ? parseInt(daysParam, 10) : 30;
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86_400_000);
+    params.set("from", from.toISOString());
+    params.set("to", to.toISOString());
   }
 
+  if (pueParam) params.set("pue", pueParam);
+
+  const upstream = `${AGGREGATION_URL}/api/v1/namespaces?${params.toString()}`;
+
   try {
-    const rows = await queryChargeback(days);
+    const res = await fetch(upstream, {
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      return NextResponse.json(
+        { error: `aggregation service error (${res.status}): ${body}` },
+        { status: 502 },
+      );
+    }
+    const data = await res.json();
+    // Normalise: aggregation service returns { namespaces: [...] }
+    // Dashboard expects { rows: [...] }
+    const rows = (data.namespaces ?? []).map(
+      (n: {
+        Namespace: string;
+        EnergyJoulesRaw: number;
+        EnergyJoulesPUE: number;
+        OutputTokens: number;
+        AttributionMethod: string;
+        Team: string;
+        CostCentre: string;
+      }) => ({
+        namespace: n.Namespace,
+        workload: "",
+        model: "",
+        hardware: "",
+        calibration_tier: "",
+        attribution_method: n.AttributionMethod,
+        energy_joules: n.EnergyJoulesRaw,
+        token_count: n.OutputTokens,
+      }),
+    );
     return NextResponse.json({ rows });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

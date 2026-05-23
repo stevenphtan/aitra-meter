@@ -1,14 +1,16 @@
 package aggregation
 
-// CalibrationTier indicates the quality of the reference baseline available
-// for a model × hardware combination (spec §5.2, priority order).
-type CalibrationTier string
+import "github.com/aitra-ai/aitra-meter/internal/model"
+
+// CalibrationTier is a type alias for model.CalibrationTier.
+// Code in this package (including tests) may use the unqualified name.
+type CalibrationTier = model.CalibrationTier
 
 const (
-	TierAitraBenchmark CalibrationTier = "aitra_benchmark"
-	TierReference      CalibrationTier = "reference"
-	TierSelfCalibrated CalibrationTier = "self_calibrated"
-	TierUncalibrated   CalibrationTier = "uncalibrated"
+	TierAitraBenchmark CalibrationTier = model.TierAitraBenchmark
+	TierReference      CalibrationTier = model.TierReference
+	TierSelfCalibrated CalibrationTier = model.TierSelfCalibrated
+	TierUncalibrated   CalibrationTier = model.TierUncalibrated
 )
 
 // CalibrationEntry holds a reference J/token value for a model × hardware pair.

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aitra-ai/aitra-meter/internal/aggregation"
+	"github.com/aitra-ai/aitra-meter/internal/model"
 	"github.com/aitra-ai/aitra-meter/internal/storage"
 )
 
@@ -28,19 +28,19 @@ func init() {
 // It stores all written records and supports basic chargeback aggregation.
 type Backend struct {
 	mu      sync.RWMutex
-	records []aggregation.MeasurementRecord
+	records []model.MeasurementRecord
 }
 
 func (b *Backend) Name() string { return "memory" }
 
-func (b *Backend) Write(_ context.Context, r aggregation.MeasurementRecord) error {
+func (b *Backend) Write(_ context.Context, r model.MeasurementRecord) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.records = append(b.records, r)
 	return nil
 }
 
-func (b *Backend) WriteBatch(_ context.Context, rs []aggregation.MeasurementRecord) error {
+func (b *Backend) WriteBatch(_ context.Context, rs []model.MeasurementRecord) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.records = append(b.records, rs...)
@@ -50,10 +50,10 @@ func (b *Backend) WriteBatch(_ context.Context, rs []aggregation.MeasurementReco
 func (b *Backend) Close() error { return nil }
 
 // Records returns a copy of all written records. Used in tests to assert state.
-func (b *Backend) Records() []aggregation.MeasurementRecord {
+func (b *Backend) Records() []model.MeasurementRecord {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	out := make([]aggregation.MeasurementRecord, len(b.records))
+	out := make([]model.MeasurementRecord, len(b.records))
 	copy(out, b.records)
 	return out
 }

@@ -1,15 +1,18 @@
 package aggregation
 
-import "context"
+import (
+	"context"
 
-// AttributionMethod describes how J/token is attributed to a namespace.
-// direct:       one vLLM instance per namespace — J/token = namespace_energy ÷ namespace_tokens.
-// proportional: shared vLLM instance — J/token = cluster_J/token × (ns_tokens ÷ cluster_tokens).
-type AttributionMethod string
+	"github.com/aitra-ai/aitra-meter/internal/model"
+)
+
+// AttributionMethod is a type alias for model.AttributionMethod.
+// Code in this package (including tests) may use the unqualified name.
+type AttributionMethod = model.AttributionMethod
 
 const (
-	AttributionDirect       AttributionMethod = "direct"
-	AttributionProportional AttributionMethod = "proportional"
+	AttributionDirect       AttributionMethod = model.AttributionDirect
+	AttributionProportional AttributionMethod = model.AttributionProportional
 )
 
 // PodMeta holds the Kubernetes metadata resolved for a workload pod.

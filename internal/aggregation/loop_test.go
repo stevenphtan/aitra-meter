@@ -24,6 +24,18 @@ func (s *recordSink) Write(_ context.Context, r MeasurementRecord) error {
 	return nil
 }
 
+func (s *recordSink) WriteBatch(ctx context.Context, rs []MeasurementRecord) error {
+	for _, r := range rs {
+		if err := s.Write(ctx, r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *recordSink) Close() error { return nil }
+func (s *recordSink) Name() string { return "recordSink" }
+
 func (s *recordSink) last() MeasurementRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()

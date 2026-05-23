@@ -10,7 +10,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aitra-ai/aitra-meter/internal/aggregation"
+	"github.com/aitra-ai/aitra-meter/internal/model"
 	"github.com/aitra-ai/aitra-meter/internal/storage"
 )
 
@@ -41,11 +41,11 @@ func New(path string) (*Backend, error) {
 
 func (b *Backend) Name() string { return "duckdb" }
 
-func (b *Backend) Write(ctx context.Context, r aggregation.MeasurementRecord) error {
-	return b.WriteBatch(ctx, []aggregation.MeasurementRecord{r})
+func (b *Backend) Write(ctx context.Context, r model.MeasurementRecord) error {
+	return b.WriteBatch(ctx, []model.MeasurementRecord{r})
 }
 
-func (b *Backend) WriteBatch(_ context.Context, rs []aggregation.MeasurementRecord) error {
+func (b *Backend) WriteBatch(_ context.Context, rs []model.MeasurementRecord) error {
 	// TODO: INSERT INTO aitra_measurements using prepared statement
 	return fmt.Errorf("duckdb: not yet implemented — %d records dropped", len(rs))
 }

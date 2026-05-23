@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -20,15 +23,19 @@ import (
 
 	measurementv1 "github.com/aitra-ai/aitra-meter/api/proto/measurement/v1"
 	"github.com/aitra-ai/aitra-meter/internal/aggregation"
-	"github.com/aitra-ai/aitra-meter/internal/clickhouse"
 	k8slookup "github.com/aitra-ai/aitra-meter/internal/k8s"
+	"github.com/aitra-ai/aitra-meter/internal/storage"
+
+	// storage backends — blank imports trigger init() registration
+	_ "github.com/aitra-ai/aitra-meter/internal/storage/clickhouse"
+	_ "github.com/aitra-ai/aitra-meter/internal/storage/duckdb"
+	_ "github.com/aitra-ai/aitra-meter/internal/storage/memory"
 )
 
 func main() {
 	metricsAddr   := flag.String("metrics-addr",   ":8080", "Prometheus metrics and API listen address")
 	grpcAddr      := flag.String("grpc-addr",      ":9091", "gRPC listen address for measurement agents")
 	clusterName   := flag.String("cluster",        "",      "Cluster name (required)")
-	clickhouseDSN := flag.String("clickhouse-dsn", "",      "ClickHouse DSN (omit to disable persistence)")
 	kubeconfig    := flag.String("kubeconfig",     "",      "Path to kubeconfig (empty = in-cluster)")
 	logLevel      := flag.String("log-level",      "info",  "Log level: debug | info | warn | error")
 	flag.Parse()
@@ -49,19 +56,26 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// --- ClickHouse writer -------------------------------------------------
-	var writer aggregation.RecordWriter = &noopRecordWriter{log: log}
-	if *clickhouseDSN != "" {
-		chWriter, err := clickhouse.New(ctx, clickhouse.Config{DSN: *clickhouseDSN}, log)
-		if err != nil {
-			log.Fatal("clickhouse init failed", zap.Error(err))
-		}
-		defer chWriter.Close(context.Background()) //nolint:errcheck
-		writer = chWriter
-		log.Info("clickhouse writer enabled")
-	} else {
-		log.Warn("--clickhouse-dsn not set; measurement records will not be persisted")
+	// --- storage backend ---------------------------------------------------
+	backendName := os.Getenv("STORAGE_BACKEND")
+	if backendName == "" {
+		backendName = "clickhouse"
 	}
+	backend, err := storage.New(backendName, map[string]string{
+		"dsn":  os.Getenv("CLICKHOUSE_DSN"),
+		"path": os.Getenv("DUCKDB_PATH"),
+	})
+	if err != nil {
+		// Fall back to memory backend so the service starts without persistence.
+		log.Warn("storage backend init failed — falling back to memory (no persistence)",
+			zap.String("backend", backendName),
+			zap.Error(err),
+		)
+		backend, _ = storage.New("memory", nil)
+	} else {
+		log.Info("storage backend ready", zap.String("backend", backendName))
+	}
+	defer backend.Close() //nolint:errcheck
 
 	// --- Kubernetes client -------------------------------------------------
 	k8sClient, err := buildK8sClient(*kubeconfig)
@@ -75,7 +89,7 @@ func main() {
 		aggregation.NewResolver(k8slookup.NewPodMetaLookup(k8sClient), aggregation.PolicyConfig{}),
 		aggregation.NewCalibrationTableFromMap(nil),
 		k8slookup.NewNodeHardwareLookup(k8sClient),
-		writer,
+		backend,
 	)
 
 	// --- gRPC server -------------------------------------------------------
@@ -92,7 +106,7 @@ func main() {
 		}
 	}()
 
-	// --- HTTP server (metrics + health) ------------------------------------
+	// --- HTTP server (metrics + health + API) ------------------------------
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +116,37 @@ func main() {
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	})
+
+	// GET /api/v1/namespaces?from=<RFC3339>&to=<RFC3339>&pue=<float>
+	// Used by the dashboard chargeback view.
+	mux.HandleFunc("/api/v1/namespaces", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		from, err := time.Parse(time.RFC3339, q.Get("from"))
+		if err != nil {
+			from = time.Now().AddDate(0, 0, -30)
+		}
+		to, err := time.Parse(time.RFC3339, q.Get("to"))
+		if err != nil {
+			to = time.Now()
+		}
+		pue, err := strconv.ParseFloat(q.Get("pue"), 64)
+		if err != nil || pue <= 0 {
+			pue = 1.0
+		}
+
+		charges, err := backend.QueryChargeback(r.Context(), storage.ChargebackQuery{
+			Cluster: *clusterName,
+			From:    from,
+			To:      to,
+			PUE:     pue,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"namespaces": charges})
 	})
 
 	httpSrv := &http.Server{Addr: *metricsAddr, Handler: mux}
@@ -123,19 +168,6 @@ func newLogger(level string) *zap.Logger {
 	_ = cfg.Level.UnmarshalText([]byte(level))
 	l, _ := cfg.Build()
 	return l
-}
-
-// --- helpers ----------------------------------------------------------------
-
-type noopRecordWriter struct{ log *zap.Logger }
-
-func (n *noopRecordWriter) Write(_ context.Context, r aggregation.MeasurementRecord) error {
-	n.log.Debug("measurement record (no clickhouse DSN configured)",
-		zap.String("node", r.Node),
-		zap.String("namespace", r.Namespace),
-		zap.Float64("j_per_token", r.JPerToken),
-	)
-	return nil
 }
 
 func buildK8sClient(kubeconfigPath string) (kubernetes.Interface, error) {
